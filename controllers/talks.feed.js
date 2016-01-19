@@ -6,7 +6,6 @@ var User = require('../models/User');
 var Vote = require('../models/Vote');
 var FeedItem = require('../models/FeedItem');
 var async = require('async');
-var logger = require('../logger');
 var Q = require('q');
 var _ = require('underscore');
 
@@ -53,17 +52,19 @@ exports.get = function(req, res) {
   // feedId will be different each time, find all feed items for current id
   FeedItem.find(query).exec(function(err, feedItems) {
     if (err) {
-      var error = 'Could not get feed items for user feed';
-      logger.error(error, err);
       return res.status(500).json({
         errors: [{
-          title: error
+          title: 'Could not get feed items for user feed'
         }]
       })
     }
 
     if (!_.isArray(feedItems)) {
-      return cb('Could not get feed items for user feed', null);
+      return res.status(404).json({
+        errors: [{
+          title: "Feed items could not be found"
+        }]
+      })
     }
 
     var ids = feedItems.map(function(feedItem) {
@@ -82,20 +83,17 @@ exports.get = function(req, res) {
       'endDate': -1
     }).limit(FEED_ACCURACY).exec(function(err, talks) {
       if (err) {
-        var error = 'Could not get talks for user feed';
-        logger.error(error, err);
         return res.status(500).json({
           errors: [{
-            title: error
+            title: 'Could not get talks for user feed'
           }]
         })
       }
 
       if (!_.isArray(talks)) {
-        var error = 'Problem getting talks for user feed';
         return res.status(404).json({
           errors: [{
-            title: error
+            title: 'Problem getting talks for user feed'
           }]
         })
       }
@@ -119,9 +117,10 @@ exports.get = function(req, res) {
                   callback();
                 }, function(err) {
                   if (err) {
-                    cb({
-                      error: 'There was an error ranking talks by user industry'
-                    }, {});
+                    return cb({
+                      status: 500,
+                      title: 'There was an error ranking talks by user industry'
+                    });
                   }
                   cb(null, talks);
                 });
@@ -129,7 +128,10 @@ exports.get = function(req, res) {
                 cb(null, []); // no industries to rank
               }
             }).catch(function(err) {
-              cb(err);
+              return cb({
+                status: 500,
+                title: err
+              });
             });
           } else {
             cb(null, []); // send empty array bc no industries
@@ -147,9 +149,10 @@ exports.get = function(req, res) {
                   callback();
                 }, function(err) {
                   if (err) {
-                    cb({
-                      error: 'There was an error ranking talks by user industry follows'
-                    }, {});
+                    return cb({
+                      status: 500,
+                      title: 'There was an error ranking talks by user industry follows'
+                    });
                   }
                   cb(null, talks);
                 });
@@ -157,7 +160,10 @@ exports.get = function(req, res) {
                 cb(null, []); // no following industries to rank
               }
             }).catch(function(err) {
-              cb(err);
+              return cb({
+                status: 500,
+                title: err
+              });
             });
           } else {
             cb(null, []);
@@ -175,9 +181,10 @@ exports.get = function(req, res) {
             callback();
           }, function(err) {
             if (err) {
-              cb({
-                error: 'There was an error ranking talks by votes'
-              }, {});
+              return cb({
+                status: 500,
+                title: 'There was an error ranking talks by votes'
+              });
             }
             cb(null, talks);
           });
@@ -194,20 +201,19 @@ exports.get = function(req, res) {
             callback();
           }, function(err) {
             if (err) {
-              cb({
-                error: 'There was an error ranking talks by attendees'
-              }, {});
+              return cb({
+                status: 500,
+                title: 'There was an error ranking talks by attendees'
+              });
             }
             cb(null, talks);
           });
         }
       }, function(err, results) {
         if (err) {
-          var error = 'There was an error generating this feed';
-          logger.error(error, err);
-          return res.status(500).json({
+          return res.status(err.status).json({
             errors: [{
-              title: error
+              title: err.title
             }]
           })
         }
@@ -220,11 +226,9 @@ exports.get = function(req, res) {
             data: result
           });
         }).catch(function(err) {
-          var error = 'There was an error generating this feed.';
-          logger.error(error, err);
           return res.status(500).json({
             errors: [{
-              title: error
+              title: 'There was an error generating this feed.'
             }]
           })
         });
@@ -253,7 +257,7 @@ function createFeedItems(talks, feedId, activeUser) {
     },
     function(err) {
       if (err) {
-        return deferred.reject(new Error('There was a problem creating feed items.'));
+        return deferred.reject('There was a problem creating feed items.');
       }
       deferred.resolve(talks);
     });
@@ -266,7 +270,7 @@ function getUserIndustryIds(userId) {
     _id: userId
   }).exec(function(err, user) {
     if (err || !_.isObject(user)) {
-      return deferred.reject(new Error('There was a problem finding the user.'));
+      return deferred.reject('There was a problem finding the user.');
     }
     var result = [];
     result = user.industries.map(function(industry) {
@@ -286,7 +290,7 @@ function getUserIndustryFollows(userId) {
     }
   }).exec(function(err, follows) {
     if (err || !_.isArray(follows)) {
-      return deferred.reject(new Error('There was a problem finding the indsutries this user follows.'));
+      return deferred.reject('There was a problem finding the indsutries this user follows.');
     }
     var result = [];
     result = follows.map(function(follow) {
